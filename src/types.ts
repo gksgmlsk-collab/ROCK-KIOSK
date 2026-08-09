@@ -24,6 +24,17 @@ export type RegisterResponse = { ok: true };
 export type SubmitBody = Identity & { pin: string; lapRange: LapRange };
 export type SubmitResponse = { ok: true; alreadyDone: boolean; lapRange: LapRange };
 
+/** GET /api/kiosk/status 응답 (공개, 인증 운영시간 게이트) */
+export type KioskStatusReason = 'weekend' | 'holiday' | 'before' | 'after' | null;
+export type KioskStatusResponse = {
+  open: boolean;
+  date: string;
+  isOperatingDay: boolean;
+  reason: KioskStatusReason;
+  windowStart: string;
+  windowEnd: string;
+};
+
 /** 서버가 내려주는 오류 코드 (JSON { error: code } 형태) */
 export type ApiErrorCode =
   | 'invalid_input'
@@ -33,6 +44,7 @@ export type ApiErrorCode =
   | 'bad_pin'
   | 'locked'
   | 'not_registered'
+  | 'closed'
   | 'network_error'
   | 'unknown';
 
@@ -40,6 +52,8 @@ export type ApiError = {
   code: ApiErrorCode;
   /** bad_pin 응답에 포함되는 남은 시도 횟수 */
   remaining?: number;
+  /** closed 응답에 포함되는 운영시간 창 */
+  window?: { windowStart?: string; windowEnd?: string; [k: string]: unknown };
   status?: number;
 };
 

@@ -10,6 +10,7 @@ import type {
   ApiError,
   ApiResult,
   Identity,
+  KioskStatusResponse,
   LookupResponse,
   RegisterBody,
   RegisterResponse,
@@ -48,9 +49,11 @@ async function request<T>(path: string, init?: RequestInit): Promise<ApiResult<T
   if (!res.ok) {
     const code = (body as { error?: string } | null)?.error;
     const remaining = (body as { remaining?: number } | null)?.remaining;
+    const win = (body as { window?: ApiError['window'] } | null)?.window;
     const error: ApiError = {
       code: (code as ApiError['code']) ?? 'unknown',
       remaining,
+      window: win,
       status: res.status,
     };
     return { ok: false, error };
@@ -69,6 +72,11 @@ function toQuery(params: Record<string, string | number | undefined>): string {
 }
 
 // ---------- 키오스크 공개 API ----------
+
+/** GET /api/kiosk/status — 운영시간 게이트 상태 조회 (항상 공개, 인증 없음) */
+export function kioskStatus() {
+  return request<KioskStatusResponse>('/api/kiosk/status');
+}
 
 export function kioskLookup(identity: Identity) {
   return request<LookupResponse>('/api/kiosk/lookup', {

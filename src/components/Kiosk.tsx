@@ -1,15 +1,32 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, ChevronRight, Footprints, IdCard, Loader2, LockKeyhole, Radio, Trees } from 'lucide-react';
+import { BookOpen, ChevronRight, Footprints, IdCard, Loader2, LockKeyhole, Moon, Radio, Trees } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Header from './Header';
 import NumberPad from './NumberPad';
-import { kioskLookup, kioskRegister, kioskSubmit } from '../api';
-import type { Identity, LapRange } from '../types';
+import { kioskLookup, kioskRegister, kioskStatus, kioskSubmit } from '../api';
+import type { Identity, KioskStatusReason, KioskStatusResponse, LapRange } from '../types';
 
 type Step =
   | 'home' | 'class' | 'number' | 'code' | 'privacy'
   | 'pinSetup' | 'pinConfirm' | 'pin' | 'walk' | 'success' | 'already'
-  | 'notfound' | 'network';
+  | 'notfound' | 'network' | 'closed';
+
+/** 운영시간 게이트 상태 폴링 주기(ms). 키오스크는 상시 켜져 있는 기기라 자동 갱신이 필요. */
+const STATUS_POLL_MS = 60_000;
+
+function closedReasonMessage(reason: KioskStatusReason): string {
+  switch (reason) {
+    case 'weekend':
+    case 'holiday':
+      return '오늘은 쉬는 날이에요, 다음 등교일에 만나요!';
+    case 'before':
+      return '곧 열려요 — 7:40부터 시작!';
+    case 'after':
+      return '오늘 인증은 끝났어요. 내일 아침에 만나요!';
+    default:
+      return '조금만 기다려 주세요.';
+  }
+}
 
 const laps: { v: LapRange; label: string; icon: string; sub: string }[] = [
   { v: '1_2', label: '1~2바퀴', icon: '🐾', sub: '가볍게 시작!' },
@@ -38,6 +55,7 @@ export default function Kiosk() {
   const [notice, setNotice] = useState(false);
   const [busy, setBusy] = useState(false);
   const [lastAction, setLastAction] = useState<(() => void) | null>(null);
+  const [status, setStatus] = useState<KioskStatusResponse | null>(null);
 
   const identity = (): Identity => ({ schoolYear, grade, classNo: klass, studentNo: num });
 
@@ -47,9 +65,9 @@ export default function Kiosk() {
     setLap(undefined); setDoneLapRange(undefined); setMsg(''); setLastAction(null);
   };
 
-  // 30초 무입력 자동 초기화 (성공/네트워크 대기 화면은 제외)
+  // 30초 무입력 자동 초기화 (성공/네트워크 대기/운영시간 안내 화면은 제외)
   useEffect(() => {
-    if (step === 'home' || step === 'success') return;
+    if (step === 'home' || step === 'success' || step === 'closed') return;
     let left = 30;
     const id = setInterval(() => { if (--left <= 0) { clearInterval(id); reset(); } }, 1000);
     return () => clearInterval(id);
@@ -57,7 +75,24 @@ export default function Kiosk() {
 
   useEffect(() => {
     if (step === 'success') { const id = setTimeout(reset, 3000); return () => clearTimeout(id); }
+    if (step === 'closed') { const id = setTimeout(reset, 5000); return () => clearTimeout(id); }
   }, [step]);
+
+  // 운영시간 게이트 상태 폴링. 키오스크는 상시 켜져 있는 기기라 마운트 시 + 60초 간격으로 갱신한다.
+  // 진행 중인 인증 흐름(step !== 'home')은 폴링 결과로 끊지 않는다 — 홈 화면 렌더링 시에만 반영한다.
+  // 네트워크 실패는 조회 결과를 그대로 유지(직전 상태 또는 null)하여 기존 플로우를 막지 않는다. 최종 판정은 서버(submit 403)가 한다.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      const res = await kioskStatus();
+      if (!cancelled && res.ok) setStatus(res.data);
+    };
+    poll();
+    const id = setInterval(poll, STATUS_POLL_MS);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  const gateClosed = status !== null && status.open === false;
 
   const chooseStudent = async (n: number) => {
     setNum(n); setMsg(''); setBusy(true);
@@ -127,6 +162,12 @@ export default function Kiosk() {
         return;
       }
       if (code === 'not_registered' || code === 'not_found') { setStep('notfound'); return; }
+      if (code === 'closed') {
+        setPin('');
+        setMsg('인증 시간이 지났어요(평일 아침 7:40~8:50). 내일 아침에 다시 만나요!');
+        setStep('closed');
+        return;
+      }
       setLastAction(() => () => submit());
       setStep('network');
       return;
@@ -141,13 +182,17 @@ export default function Kiosk() {
       <section className="stage">
         <div className="panel primary">
           {step === 'home' ? (
-            <>
-              <div className="seal"><IdCard /></div>
-              <h2>학생 인증하기</h2>
-              <p>학년, 반, 번호와 인증번호로 안전하게 인증해요.</p>
-              <div className="welcome"><Trees /><div><b>아침 걷기 준비됐나요?</b><span>10초면 인증이 끝나요!</span></div></div>
-              <button className="hero-btn" onClick={() => setStep('class')}><Footprints /> 걷기 인증 시작 <ChevronRight /></button>
-            </>
+            gateClosed && status ? (
+              <ClosedHome status={status} />
+            ) : (
+              <>
+                <div className="seal"><IdCard /></div>
+                <h2>학생 인증하기</h2>
+                <p>학년, 반, 번호와 인증번호로 안전하게 인증해요.</p>
+                <div className="welcome"><Trees /><div><b>아침 걷기 준비됐나요?</b><span>10초면 인증이 끝나요!</span></div></div>
+                <button className="hero-btn" onClick={() => setStep('class')}><Footprints /> 걷기 인증 시작 <ChevronRight /></button>
+              </>
+            )
           ) : (
             <Flow
               step={step} grade={grade} klass={klass} num={num}
@@ -188,6 +233,23 @@ export default function Kiosk() {
         </div>
       )}
     </main>
+  );
+}
+
+function ClosedHome({ status }: { status: KioskStatusResponse }) {
+  return (
+    <>
+      <div className="seal"><Moon /></div>
+      <h2>🌙 지금은 인증 시간이 아니에요</h2>
+      <p>아침 걷기 인증: 평일(공휴일 제외) 아침 7:40~8:50</p>
+      <div className="welcome">
+        <Trees />
+        <div>
+          <b>{closedReasonMessage(status.reason)}</b>
+          <span>{status.windowStart}~{status.windowEnd}에 다시 찾아와 주세요.</span>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -295,6 +357,16 @@ function Flow(props: {
         <span className="trophy">❗</span>
         <h2>등록된 학생 정보를 찾지 못했어요</h2>
         <p>선생님께 등록을 요청해 주세요.</p>
+        <button className="hero-btn" onClick={props.onReset}>처음으로</button>
+      </div>
+    );
+  }
+  if (step === 'closed') {
+    return (
+      <div className="flow success">
+        <span className="trophy">🌙</span>
+        <h2>인증 시간이 지났어요</h2>
+        <p>{msg}</p>
         <button className="hero-btn" onClick={props.onReset}>처음으로</button>
       </div>
     );
