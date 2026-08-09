@@ -1,0 +1,5 @@
+
+import type {LapRange,Student,WalkingRecord} from '../types';
+const students:Student[]=[]; for(let g=1;g<=6;g++)for(let c=1;c<=3;c++)for(let n=1;n<=12;n++)students.push({id:crypto.randomUUID(),schoolYear:new Date().getFullYear(),grade:g,classNo:c,studentNo:n,registrationCode:String(crypto.getRandomValues(new Uint16Array(1))[0]%9000+1000),codeUsed:false,consent:true,failedAttempts:0,active:true});
+const records:WalkingRecord[]=[];
+export const store={students,records,announcements:['8월 아침 걷기 프로그램이 시작되었습니다.','비가 오는 날은 실내 걷기 안내를 따라 주세요.'],find(g:number,c:number,n:number){return students.find(s=>s.active&&s.schoolYear===new Date().getFullYear()&&s.grade===g&&s.classNo===c&&s.studentNo===n)},today(){return new Date().toLocaleDateString('en-CA')},record(studentId:string){return records.find(r=>r.studentId===studentId&&r.recordDate===this.today())},submit(studentId:string,lapRange:LapRange){if(this.record(studentId))throw new Error('DUPLICATE');const row={id:crypto.randomUUID(),studentId,recordDate:this.today(),lapRange,createdAt:new Date().toISOString()};records.push(row);return row}};
