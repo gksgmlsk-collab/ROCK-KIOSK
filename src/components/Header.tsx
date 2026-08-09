@@ -1,0 +1,3 @@
+
+import {Bell,Leaf} from 'lucide-react';import {useEffect,useState} from 'react';
+export default function Header({onNotice}:{onNotice:()=>void}){const [now,setNow]=useState(new Date());useEffect(()=>{const id=setInterval(()=>setNow(new Date()),1000);return()=>clearInterval(id)},[]);return <header><div className="crest"><Leaf/><b>SEOKAM</b><small>석암초등학교</small></div><div className="brand"><span>✦ DRACONIS ✦</span><h1>석암키오스크</h1><p>생명의 숲 아침 걷기 인증하고, 활기찬 하루를 시작해요!</p></div><button className="clock" onClick={onNotice}><small>{now.toLocaleDateString('ko-KR',{year:'numeric',month:'2-digit',day:'2-digit',weekday:'short'})}</small><strong>{now.toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit'})}</strong><span><Bell size={16}/> 공지사항</span></button></header>}
