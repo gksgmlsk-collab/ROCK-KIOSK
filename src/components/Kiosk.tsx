@@ -50,7 +50,7 @@ export default function Kiosk(){
         <div className="radio"><Radio/><div><b>석암 라디오 신청도 여기에서!</b><span>신청곡과 사연을 보내 보세요.</span></div></div>
       </aside>
     </section>
-    <a className="teacher-entry" href="/admin"><LockKeyhole/> 교사 관리</a>
+    <a className="teacher-entry" href="/?view=admin"><LockKeyhole/> 교사 관리</a>
     {notice&&<div className="modal"><div><button className="close" onClick={()=>setNotice(false)}>×</button><h2>📣 공지사항</h2>{store.announcements.map((item,index)=><p key={index}>{item}</p>)}<button className="hero-btn" onClick={()=>setNotice(false)}>확인했어요</button></div></div>}
   </main>;
 
